@@ -1,0 +1,72 @@
+# HEC-GNN Default Configuration
+# NeurIPS 2026 Submission
+
+# Model
+model:
+  type: hec_gnn           # hec_gnn | flat_gnn
+  hidden_dim: 128
+  L1: 3                   # Stage 1 GIN layers
+  L3: 3                   # Stage 3 GINE layers
+  dropout: 0.1
+  K: 20                   # grid points
+
+# Grid
+grid:
+  r_min: 0.02
+  r_max: 5.0
+  K: 20
+  spacing: log            # log-spaced
+
+# Training
+training:
+  epochs: 200
+  batch_size: 32
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+  beta_cbr: 0.1           # CBR auxiliary weight
+  beta_rms: 0.05          # RMS auxiliary weight
+  patience: 30            # early stopping
+  grad_clip: 1.0
+  warmup_epochs: 5
+  scheduler: cosine       # linear warmup + cosine decay
+  seeds: [42, 123, 7]
+
+# Data generation (SA surrogate)
+data_sa:
+  grid_size: 20
+  r_min: 0.02
+  r_max: 5.0
+  n_reads: 200
+  n_sweeps: 500
+  h_max: 4.0
+  j_max: 1.0
+
+# Data generation (Boltzmann surrogate)
+data_boltzmann:
+  beta: 2.0
+  n_chains: 50
+  n_burn: 500
+  n_sample: 500
+  thin: 5
+
+# Problem families
+families:
+  - random_ising
+  - sk_model
+  - nae3sat_planted
+  - weighted_maxcut
+  - maxcut_3reg
+
+# Topologies
+topologies:
+  train: [P4, P8, P16]    # 70/14/16 train/val/test split
+  zero_shot: [Z4]          # held out entirely
+
+# QPU adaptation
+qpu:
+  n_reads: 500
+  grid_size: 20
+  finetune_lr: 1.0e-4
+  finetune_epochs: 200
+  finetune_patience: 30
+  freeze_backbone: true    # only train energy_head (58,836 params)
