@@ -1,4 +1,4 @@
-# HEC-GNN — Design Document
+# HEC-GNN: Design Document
 
 > Companion to the paper "HEC-GNN: A Hierarchical Hardware-aware GNN for Chain Strength Selection in Quantum Annealing." This document is the contract between the paper's claims and the code in this release.
 
