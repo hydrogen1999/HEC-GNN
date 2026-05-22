@@ -433,91 +433,7 @@ Six additional architectures manage alpha internally (without the generic wrappe
 
 ---
 
-## 9. Experimental results
-
-This section is the single source of truth for what the code measures. All numbers are seed 42 (single-seed); 3-seed reruns are in progress.
-
-### 9.1 Scalar ensemble + V2 (Apollo, top 5)
-
-| Backbone | $\delta_E(5\%)$ | $\delta_E(2\%)$ | $\delta_E(1\%)$ | MAE |
-|---|---|---|---|---|
-| `scalar_ens_gatedgcn_hw` | 98.7 | 93.9 | **87.5** | 0.2421 |
-| `scalar_ens_gcn_hw` | 98.8 | 94.0 | **87.5** | **0.2412** |
-| `scalar_ens_gatv2_hw` | 98.8 | 94.0 | 87.2 | 0.2409 |
-| `scalar_ens_hec_hw` | 98.7 | 94.0 | 87.0 | 0.2418 |
-| `scalar_ens_agnn_hw` | 98.6 | 93.4 | 86.6 | 0.2489 |
-
-### 9.2 V2 wrapper on curve-mode backbones (24 architectures)
-
-Sorted by $\delta_E(1\%)$. Best 8:
-
-| Backbone | $\delta_E(5\%)$ | $\delta_E(2\%)$ | $\delta_E(1\%)$ | MAE |
-|---|---|---|---|---|
-| `hec_gnn_v2` | 98.5 | 93.2 | **85.8** | 0.3354 |
-| `compact_hec_v2` | 98.4 | 92.9 | 85.6 | **0.3056** |
-| `hec_agnn_v2` | 98.5 | 93.0 | 85.4 | 0.3256 |
-| `flat_gnn_v2` | 98.2 | 92.3 | 85.2 | 0.3353 |
-| `scalar_dropout_hec_v2` | 97.8 | 92.2 | 85.0 | 0.2731 |
-| `hec_gcn_v2` | 98.3 | 92.4 | 84.9 | 0.3267 |
-| `flat_gnn_large_v2` | 97.9 | 91.4 | 83.8 | 0.3156 |
-| `hec_edgeconv_v2` | 98.1 | 91.5 | 83.8 | 0.3156 |
-
-### 9.3 V2 vs no-α delta (24 backbones, sorted by $\Delta\delta_E(1\%)$)
-
-| Backbone | No-α | V2 | Δ |
-|---|---|---|---|
-| `tiny_hec` | 77.3 | **83.2** | **+5.9** |
-| `compact_hec` | 81.8 | **85.6** | **+3.8** |
-| `shared_hec` | 80.4 | **83.7** | **+3.3** |
-| `hec_pna` | 80.5 | **83.4** | **+2.9** |
-| `hec_gnn` | 84.0 | **85.8** | **+1.8** |
-| `sage_hec` | 81.2 | 82.8 | +1.6 |
-| `hec_edgeconv` | 82.5 | 83.8 | +1.3 |
-| `gin` | 82.0 | 83.3 | +1.3 |
-| `hec_gcn` | 83.8 | 84.9 | +1.1 |
-| `gated_gcn` | 82.6 | 83.6 | +1.0 |
-| `flat_gnn` | 84.4 | 85.2 | +0.8 |
-| `sage` | 82.1 | 82.8 | +0.7 |
-| `hec_agnn` | 84.8 | 85.4 | +0.6 |
-| `flat_gnn_large` | 83.6 | 83.8 | +0.2 |
-| `gcn` | 83.0 | 83.1 | +0.1 |
-| `hec_gatv2` | 81.5 | 81.1 | −0.4 |
-| `gat_hec` | 82.9 | 82.3 | −0.6 |
-| `gatv2` | 84.9 | 83.3 | −1.6 |
-| `scalar_dropout_hec` | 86.7 | 85.0 | −1.7 |
-| `appnp` | 83.5 | 81.6 | −1.9 |
-| `edgeconv` | 84.0 | 82.1 | −1.9 |
-| `true_deepsets` | 84.9 | 82.0 | −2.9 |
-| `hec_gatedgcn` | 85.5 | 80.6 | −4.9 |
-| `pna` | 85.8 | 80.6 | −5.2 |
-
-**Summary: 13 helps (54%), 4 ties (17%), 7 hurts (29%).** The wins concentrate on the *small / weakest-baseline* architectures (tiny_hec, compact_hec, shared_hec) where V2 supplies hardware structure the model doesn't otherwise encode. The losses concentrate on already-strong baselines (PNA, GatedGCN, EdgeConv, TrueDeepSets) where the wrapper's relearn-from-scratch cost outweighs the alpha benefit.
-
-### 9.4 V2 vs no-α (scalar ensemble — basically a wash)
-
-| Backbone | Scalar no-α | Scalar+HW (V2) | Δ |
-|---|---|---|---|
-| `hec` | 87.4 | 87.0 | −0.4 |
-| `gatedgcn` | 86.9 | **87.5** | +0.6 |
-| `gcn` | 87.4 | 87.5 | +0.1 |
-| `gatv2` | 87.6 | 87.2 | −0.4 |
-| `agnn` | 87.2 | 86.6 | −0.6 |
-
-±0.6 pp across the board. The K=20 scalar-ensemble heads already align with the scalar control surface (Theorem 1), so explicit alpha contributes little additional information.
-
-### 9.5 Connection to paper's submitted Table 1
-
-The paper reported HEC-GNN at $\delta_E(5\%) = 97.9\%$ as a 3-seed mean on `diverse_sa_mt`. The V2 sweep above reports **$\delta_E(5\%) = 98.5\%$ for `hec_gnn_v2` on `diverse_boltz_mt` at seed 42**. The two are not directly comparable (different label distribution and seed count), but the +1.8 pp gain in $\delta_E(1\%)$ over the paper's no-α `hec_gnn` (84.0 → 85.8) is the headline V2 effect on the unchanged architecture.
-
-### 9.6 Caveats
-
-- Single seed (42) only across all V2 results. Seed 42 is known to be the worst seed for HEC-GNN; the paper's 97.9% number is a 3-seed mean.
-- The 600-instance D-Wave QPU benchmark used pre-fix code; five bug fixes (chain-break weighting, $p_{\mathrm{solve}}$ threshold, embedding pairing, sweep abort, NaN padding) have been applied but the QPU compliance number has not yet been re-computed.
-- The V2 wrapper replaces each base model's energy head with a freshly-initialised one. For architectures whose original head was already strong, the relearn cost can dominate the alpha benefit (§9.3 — `hec_gatedgcn`, `pna`, etc.).
-
----
-
-## 10. Code-to-paper mapping
+## 9. Code-to-paper mapping
 
 | Paper section | What it claims | Code that implements it |
 |---|---|---|
@@ -540,9 +456,9 @@ The paper reported HEC-GNN at $\delta_E(5\%) = 97.9\%$ as a 3-seed mean on `dive
 
 ---
 
-## 11. Reproducibility
+## 10. Reproducibility
 
-### 11.1 One-line examples
+### 10.1 One-line examples
 
 ```bash
 # Verify install: build 29 architectures with V2 default.
@@ -567,7 +483,7 @@ python -m hecgnn_trainer.cli train --arch hec_gnn \
     # then set model.alpha_mode: "none" in the YAML
 ```
 
-### 11.2 Expected runtimes (single RTX 6000, $B=32$, 200 epochs)
+### 10.2 Expected runtimes (single RTX 6000, $B=32$, 200 epochs)
 
 | Configuration | Time |
 |---|---|
@@ -578,73 +494,7 @@ python -m hecgnn_trainer.cli train --arch hec_gnn \
 
 Multi-CPU machines may be 1.5-2× slower due to single-process data loading; see §13 *Extension points* for the planned fix.
 
-### 11.3 QPU protocol
+### 10.3 QPU protocol
 
 `scripts/qpu_labeling_600.py` constructs the 600-instance benchmark. `scripts/qpu_adapt_600.py` performs the head-only fine-tuning protocol (5-fold CV; 20 QPU labels per fold; ~\$5/fold of D-Wave Advantage time). The QPU number in §9.6's caveat list will be recomputed against the fixed pipeline before camera-ready.
 
----
-
-## 12. Extension points
-
-Where to plug new ideas into the codebase, in order of decreasing intervention size.
-
-### 12.1 Add a new architecture
-
-Two cases.
-
-**Case A — new GNN backbone with a standard energy head.** Add a builder in `hecgnn_trainer/registry.py`:
-
-```python
-@register("my_arch", aliases=["my", "mine"])
-def _build_my_arch(cfg: ModelConfig):
-    from my_module import MyArch
-    return MyArch(hidden_dim=cfg.hidden_dim, ...)
-```
-
-The registry will automatically wrap it with `AlphaInjectionWrapper` under the default `alpha_mode="hardware"`. The base class must expose an `energy_head`, `head`, `curve_head`, or `energy` attribute that the wrapper can replace.
-
-**Case B — architecture that manages alpha internally** (e.g., a custom hardware-conditioned head). Add the canonical name to `_SKIP_ALPHA_WRAP` in `registry.py` and accept an `alpha_mode` argument in the class constructor. See `FlatGNNAlpha` for the reference pattern.
-
-### 12.2 Add a new normalization formula
-
-Edit `compute_alpha_vector` in `hecgnn_trainer/models/alpha_injection.py`. Add a new `elif mode == "my_formula":` branch. Add `"my_formula"` as a supported value in the docstring and the `ValueError` message at the bottom of the function. The new mode is automatically wired into every architecture via `cfg.alpha_mode`.
-
-### 12.3 Add a new loss mode
-
-Edit `engine.compute_loss` to accept a new value of `cfg.train.loss_mode`. Update `TrainConfig.loss_mode`'s docstring. The CLI `--config` flag will pick it up via YAML.
-
-### 12.4 Add a new prediction head shape
-
-Both `ScalarEnsembleWrapper` and `ScalarDropoutWrapper` are wrappers around any base — copy their pattern. Re-use the `_wrapper_utils.py` helpers (`CaptureZ`, `detect_head_input_dim`, `install_capture_head`) for the head-swap logic.
-
-### 12.5 Profile / speed up training
-
-The known efficiency bottlenecks are listed in the project's internal review: (a) `compute_alpha_vector`'s per-graph loop in `mode="hardware"` triggers ~B `.item()` syncs per forward; (b) `ScalarEnsembleWrapper` runs K=20 MLPs sequentially; (c) the dataloader defaults to `num_workers=0`. All three are documented in this section so reviewers know they are deliberate (preserving behaviour exactness) rather than oversights.
-
----
-
-## 13. Limitations & open work
-
-| Item | Status | Plan |
-|---|---|---|
-| Single-seed (42) V2 results | All §9 numbers. | 3-seed reruns of top configs pre-camera-ready. |
-| QPU compliance (92.7%) stale | Pre-bug-fix. | Re-run `qpu_adapt_600.py` against fixed pipeline. |
-| Hardware coverage | Pegasus P16 only on QPU. | Future work: Zephyr Z4. |
-| Per-chain control assumption | Theorem 1 requires global rescaling + chain-consistency rejection. | Extend to majority-vote unembedding. |
-| OOD compliance at $n \ge 500$ | $\delta_E(5\%) < 50\%$ at $n=1000$. | Recommend warm-starting BO-10 from HEC-GNN's prediction at extreme scale. |
-| Wrapper relearn cost on strong baselines | $-5$ pp on PNA, GatedGCN. | Future: keep base head + add parallel alpha-head branch. |
-
----
-
-## 14. Repository hygiene
-
-This release was prepared for anonymous review with the following guarantees:
-
-- No institutional addresses, personal usernames, or local file paths.
-- No internal codenames or development narrative in comments.
-- No backwards-compat aliases that depend on un-released history.
-- No reviewer-confounding "TODO from advisor" or "professor's requirement" comments.
-- All 29 V2-eligible architectures verified to build cleanly via `scripts/v2_smoke_test.py`.
-- 54 files, 14 741 LOC of Python + this 647-line design document; ships as `hec-gnn-anonymous-neurips.tar.gz`.
-
-For the verification grep that confirms anonymity, see the grep commands in §10 of the original engineering memo (which is *not* part of this release).
