@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 
-# Grid matching V3 paper
+# Chain-strength ratio grid used by the trainer
 K = 20
 R_MIN = 0.02
 R_MAX = 5.0
@@ -138,6 +138,15 @@ def collate_batch(instances: List[Dict]) -> Dict[str, torch.Tensor]:
         'rms_targets': torch.tensor(all_rms_targets, dtype=torch.float32),  # [B]
         'r_star': torch.tensor(all_r_star, dtype=torch.float32),  # [B]
     }
+
+    # Break curve (per-grid-point chain break rate, if available in data)
+    if 'break_curve' in instances[0]:
+        batch['break_curve'] = torch.stack(
+            [torch.tensor(inst['break_curve'], dtype=torch.float32) for inst in instances],
+            dim=0)  # [B, K]
+    else:
+        batch['break_curve'] = torch.zeros(0)
+
     return batch
 
 

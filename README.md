@@ -1,229 +1,136 @@
-# HEC-GNN: A Hierarchical Hardware-aware GNN for Chain Strength Selection in Quantum Annealing
+# HEC-GNN: Hierarchical Hardware-aware GNN for Chain Strength Selection in Quantum Annealing
 
-Official code for the NeurIPS 2026 submission.
+Anonymous code release accompanying the paper submission.
 
-Code: [https://anonymous.4open.science/r/HEC-GNN](https://anonymous.4open.science/r/HEC-GNN)
+This repository contains the training, evaluation, and dataset generation code for HEC-GNN, a three-stage hierarchical graph neural network that predicts the optimal chain strength on a per-instance basis for minor-embedded Ising problems on D-Wave-style hardware.
 
-## Setup
+**Start here:** read [`DESIGN.md`](DESIGN.md) for the paper-to-code mapping, design decisions, and full experimental results inventory. This README covers installation and quick-start; `DESIGN.md` covers everything else.
+
+## Repository layout
+
+```
+.
+├── src/                            # Original paper code
+│   ├── models/
+│   │   ├── hec_gnn.py              # HEC-GNN architecture (three-stage hierarchy)
+│   │   ├── baselines.py            # FlatGNN and FlatGNN-Large baselines
+│   │   ├── all_baselines.py        # SAGE-HEC, GAT-HEC, RGCN, GPS, HGT, FlatGAT
+│   │   ├── gnn_baselines.py        # Additional GNN variants
+│   │   ├── layers.py               # Low-level GNN layers (GINE, scatter ops, etc.)
+│   │   └── gurobi_solver.py        # Reference exact solver
+│   ├── data/
+│   │   ├── generate.py             # Single-process dataset generator
+│   │   ├── parallel_generate.py    # Multi-worker generator
+│   │   ├── dataset.py              # PyTorch dataset interface
+│   │   ├── gpu_sampler.py          # GPU-resident SA sampler
+│   │   └── patch_datasets.py       # Dataset post-processing
+│   └── utils/
+│       └── ising_util.py           # Ising-model utilities
+│
+├── hecgnn_trainer/                 # Modular training package
+│   ├── config.py                   # YAML-driven experiment configs (ModelConfig.alpha_mode default = "hardware")
+│   ├── registry.py                 # @register decorator + build_model factory (52 architectures)
+│   ├── engine.py                   # TrainingEngine + DistillEngine
+│   ├── cli.py                      # python -m hecgnn_trainer.cli {list,train,sweep}
+│   └── models/
+│       ├── alpha_injection.py      # V2 D-Wave auto_scale α + AlphaInjectionWrapper
+│       ├── jc_injection.py         # JCDirectHEC, HardwareNormHEC
+│       ├── scalar_ensemble.py      # ScalarEnsembleWrapper, ScalarDropoutWrapper
+│       ├── agnn.py                 # Anisotropic GNN (Flat + HEC)
+│       ├── extended.py             # GCN/GIN/SAGE/GATv2/PNA/GatedGCN/EdgeConv/APPNP/DeepSets + HECVariant
+│       ├── compact.py              # CompactHEC, TinyHEC, SharedHEC, distillation methods, pruning
+│       ├── mlp_model.py            # MLP baselines on 18 hand-crafted features
+│       └── raw_features.py         # Feature normalization
+│
+├── experiments/                    # Sweep YAML configs
+│   ├── sweep_all_architectures.yaml
+│   ├── sweep_27_architectures.yaml
+│   ├── ablation_loss_and_norm.yaml
+│   ├── flatgnn_alpha_ablation.yaml
+│   └── distillation_sweep.yaml
+│
+├── scripts/                        # Standalone utilities
+│   ├── v2_smoke_test.py            # Build every architecture (verify install)
+│   ├── qpu_labeling_600.py         # QPU benchmark dataset construction
+│   ├── qpu_adapt_600.py            # Head-only QPU fine-tuning protocol
+│   ├── generate_large_scale.py     # OOD generator for n ∈ {50, 75, 100, 200, 500, 1000}
+│   ├── fast_emb_v2.py              # Embedding utilities
+│   ├── sa_natural_sweep.py         # Simulated-annealing sweep
+│   ├── compute_true_optimal_all.py # GUROBI ground-truth solver
+│   └── eval_true_optimal.py
+│
+├── train.py                        # Single-config training entry point
+├── evaluate.py                     # Evaluation entry point
+├── launch_single.py                # Lightweight per-arch launcher (used by sweeps)
+├── timing.py                       # Inference-time benchmark
+├── ablation.py                     # Aggregated ablation runner
+├── generate_figures.py             # Paper figures from result JSONs
+├── requirements.txt                # Python dependencies
+├── LICENSE                         # MIT
+├── DESIGN.md                       # Design document (paper-to-code mapping, design decisions, results)
+└── README.md                       # this file
+```
+
+## Installation
 
 ```bash
-conda create -n hecgnn python=3.10 -y
-conda activate hecgnn
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Hardware requirements:**
-- Training: 1 GPU, ~2-4 hours per seed
-- Inference: CPU only, 1.4 ms per instance
-- Dataset generation: multi-core CPU, 8-24 hours depending on size
-- QPU labeling: D-Wave Leap account (~$335 for 600 instances)
+Tested with Python 3.10+, PyTorch 2.0+, and an NVIDIA GPU with ≥40 GB memory for the large architectures.
 
-## Project Structure
+## Quick verification
 
-```
-hecgnn/
-├── README.md
-├── requirements.txt
-├── LICENSE
-├── configs/default.yaml          # All hyperparameters
-├── train.py                      # Training (HEC-GNN, FlatGNN, baselines)
-├── evaluate.py                   # Full evaluation pipeline
-├── src/
-│   ├── models/
-│   │   ├── hec_gnn.py            # HEC-GNN (2.75M params, 3-stage hierarchy)
-│   │   ├── layers.py             # GIN, GINE, MPNN (no PyG dependency)
-│   │   ├── baselines.py          # UTC, Scaled, Mean, LinearReg, FlatGNN, BO, Few-Shot, Oracle
-│   │   └── all_baselines.py      # R-GCN, HGT, GPS, Flat-GAT, SAGE-HEC, GAT-HEC, FlatGNN-Large
-│   ├── data/
-│   │   ├── generate.py           # Dataset generation (SA + Boltzmann MCMC on embedded graph)
-│   │   ├── dataset.py            # PyTorch Dataset + collate_batch
-│   │   └── parallel_generate.py  # Multi-process generation
-│   └── utils/
-│       └── ising_util.py         # p_solve, TTS, Gap_best, CBR
-├── scripts/
-│   ├── generate_large_scale.py   # Large-scale OOD generation (n=100-1000)
-│   ├── qpu_labeling_600.py       # QPU label collection (D-Wave Advantage)
-│   └── qpu_adapt_600.py          # QPU adaptation (head-only fine-tuning)
-└── figures/
-    └── fig_qpu_adaptation.py     # Self-contained QPU figure (Figure 3)
-```
-
-## Model Architecture (Section 4)
-
-HEC-GNN is a three-stage hierarchical GNN (2.75M parameters) that mirrors the physical hierarchy of minor embedding:
-
-**Input:** The embedded graph G_E with scale-invariant features (Section 4.1, App. B.1):
-- 7-dim qubit features: h/RMS, |h|/RMS, intra-chain degree, inter-chain degree, |C_i|, defection incentive, singleton indicator
-- All coupling-dependent features normalized by RMS(J) for scale invariance
-
-**Three-stage hierarchy (Section 4.1):**
-- **Stage 1: Intra-chain encoding.** Each chain C_i processed independently by L_1=3 GIN layers. Qubit states pooled via sum, mean, max, and min aggregators. Max/min branches expose weakest-link and min-cut vulnerabilities (Prop. 3).
-- **Stage 2: Inter-chain pairing.** A single MPNN layer over inter-chain edges E_x reconstructs qubit-level states from [c_i^(1) || x_q], propagates external loads, and re-pools to refined chain representations. Residual connection preserves Stage-1 encoding.
-- **Stage 3: Logical-graph integration.** Chain representations augmented with log|C_i| placed on G_L nodes. L_3=3 GINEConv layers with 5-dim logical edge features. Global readout: sum + mean + max pool.
-
-**Hardware-conditioned curve head (Section 4.2):**
-
-The prediction head maps the global readout to a curve:
-
-```
-E_hat = MLP_curve(z, alpha)
-```
-
-where **alpha = [alpha(r_1 RMS(J)), ..., alpha(r_K RMS(J))]** is the closed-form hardware rescaling vector evaluated on the same grid as the output curve. Injecting alpha makes the compression regime explicit: the model does not need to infer from data where increasing J_c begins to flatten the logical signal.
-
-**Decoding (Section 4.2):** At inference, k* = argmin_k E_hat(r_k), refined via local parabolic interpolation on the log-grid. Deployed chain strength: J_c* = r* RMS(J). Single forward pass, 1.4 ms.
-
-**No PyTorch Geometric dependency.** All message passing via scatter operations in `layers.py`.
-
-## Key Contributions
-
-1. **Scalar reduction under global rescaling (Theorem 1).** Under Boltzmann sampling with global hardware rescaling and chain-consistency-rejection unembedding, per-chain strengths are dominated by their uniform envelope. The deployed control is structurally scalar.
-
-2. **Hardware-aware curve prediction.** HEC-GNN predicts the full energy-response curve E(r) with closed-form alpha(J_c) injection, rather than a point estimate. Curve supervision exposes basin geometry; Lemma 4 gives a regret bound for curve error while Remark 1 shows scalar error alone cannot control regret.
-
-3. **Surrogate-to-QPU adaptation.** Surrogate training on classical curves + head-only fine-tuning on 20 QPU-labeled calibration instances per fold. 2.1% of parameters updated.
-
-## Training Details
-
-- **Loss:** L = L_energy + beta_cbr L_cbr, where L_energy is L1 on normalized excess-energy curves (Eq. 1), L_cbr is per-chain break BCE auxiliary
-- **Optimizer:** AdamW (lr=5e-4, wd=1e-4), linear warmup (5 epochs) + cosine decay, 200 epochs
-- **Early stopping:** patience 30 on validation MAE(r*)
-- **Gradient clipping:** max_norm=1.0
-- **Seeds:** 3 independent runs (42, 123, 7)
-- **Batch size:** 32
-
-## Datasets
-
-### Surrogate labels (Section 5, App. C.2)
-- **Boltzmann** (n <= 40): MCMC on rescaled embedded Hamiltonian H_eff = H_emb/alpha, beta=2.0, 50 chains x 500 burn-in x 500 sampling
-- **SA** (OOD, n > 40): neal SimulatedAnnealingSampler, 200 reads x 500 sweeps, on H_eff
-- Both operate on the **embedded** (physical) graph, decode via majority vote, report logical energy
-- True logical optima from GUROBI 11 (n <= 40) or SA natural mode
-
-### Main benchmark (~96K instances, Table 1)
-- 5 families: Random Ising, Sherrington-Kirkpatrick, weighted MaxCut, planted solution, 3-regular MaxCut
-- Logical sizes: n in {8, 10, 12, 15, 20, 25, 30, 35, 40}
-- Topologies: Pegasus P4/P8/P16 (70/14/16 train/val/test) + Zephyr Z4 (zero-shot)
-- Embedding: minorminer, fixed seeds, 120s timeout
-
-### Embedding transfer (~29K instances, Table 2 / App. C.9)
-- Tuned minorminer (multi-seed best-of-10), Pegasus/Zephyr clique, clique-init+minorminer hybrid
-
-### OOD size extrapolation (Figure 2, App. C.11)
-- Train: ~120K instances on P16, n <= 40
-- Test: n in {50, 75, 100, 200, 500, 1000}
-
-### QPU benchmark (600 instances, Table 3, Figure 3)
-- D-Wave Advantage (Pegasus P16, 5627 qubits)
-- n in {8, 10, 12, 15, 20, 25, 30, 40}, 5 families
-- K=20 grid points, 1000 anneals per J_c, majority-vote decoding
-- 5-fold head-fine-tuning: 20 QPU-labeled calibration instances per fold
-
-## Baselines (23 methods, App. C.6)
-
-| Category | Methods |
-|----------|---------|
-| Boundary diagnostics | J_c=0, J_c=J_max |
-| Heuristics | UTC, Scaled(2.0), Mean |
-| Learned scalar zero-shot | LinearReg, XGBoost, MLP-18 |
-| Regret-aligned HEC backbone | SPO+, Plackett-Luce |
-| Learned curve: flat | FlatGNN (262K), FlatGNN-Large (2.7M) |
-| Learned curve: heterogeneous | R-GCN, HGT, GPS, Flat-GAT |
-| Learned curve: hierarchical | SAGE-HEC, GAT-HEC, **HEC-GNN (2.75M)** |
-| Search-based | Few-Shot-3/5/10, BO-10, Oracle (grid) |
-
-## Reproducing Paper Results
-
-### Table 1: Multi-topology benchmark
+A smoke test that instantiates every registered architecture under the default V2 hardware α-injection:
 
 ```bash
-# Generate dataset (~96K instances, 5 families, 4 topologies)
-python -m src.data.parallel_generate \
-    --benchmark multi_topo --n-instances 100000 --labeling sa \
-    --workers 20 --output-dir data/diverse_sa_mt
-python -m src.data.parallel_generate --merge --output-dir data/diverse_sa_mt
-
-# Train HEC-GNN (3 seeds)
-python train.py --model hec_gnn --data-dir data/diverse_sa_mt \
-    --benchmark multi_topo --seeds 42 123 7 --output-dir results/hec_gnn_mt
-
-# Train FlatGNN baseline (3 seeds)
-python train.py --model flat_gnn --data-dir data/diverse_sa_mt \
-    --benchmark multi_topo --seeds 42 123 7 --output-dir results/flat_gnn_mt
-
-# Evaluate all 23 methods
-python evaluate.py --benchmark all --data-dir data/diverse_sa_mt \
-    --model-dir results/hec_gnn_mt
+python scripts/v2_smoke_test.py
 ```
 
-**Expected:** HEC-GNN alpha_5% = 97.9 +/- 0.4%, alpha_2% = 88.5 +/- 0.4%, Gap 0.9%, CBR 10.8%, at 1.4 ms/instance.
+Expected output: 29 architectures built cleanly, all reporting `alpha_mode=hardware`.
 
-### Table 2: Instance stratification
+List all registered architectures:
 
 ```bash
-# Uses same multi-topology data, stratified by basin width and family
-python evaluate.py --benchmark stratification --data-dir data/diverse_sa_mt \
-    --model-dir results/hec_gnn_mt
+python -m hecgnn_trainer.cli list
 ```
 
-**Expected:** HEC-GNN leads on narrow basins (+8.7 pp over FlatGNN-L, +11.9 pp over XGBoost) and planted-solution family (+19.2/+22.1 pp).
+## Training
 
-### Figure 2 / OOD size extrapolation
+Single-architecture training (uses the default `alpha_mode="hardware"`):
 
 ```bash
-# Generate OOD data (train n<=40, test n=50..1000)
-python -m src.data.parallel_generate \
-    --benchmark ood_train --n-instances 120000 --labeling sa \
-    --workers 20 --output-dir data/diverse_sa_ood_train
-python -m src.data.parallel_generate \
-    --benchmark ood_test --n-instances 10000 --labeling sa \
-    --workers 20 --output-dir data/diverse_sa_ood_test
-
-# Large-scale OOD (n=100..1000)
-python scripts/generate_large_scale.py --workers 28 --output-dir data/large_scale_ood
-
-# Train + evaluate
-python train.py --model hec_gnn --data-dir data/diverse_sa_ood_train \
-    --benchmark ood --seeds 42 123 7 --output-dir results/hec_gnn_ood
-python evaluate.py --benchmark ood --data-dir data/diverse_sa_ood_test \
-    --model-dir results/hec_gnn_ood
+python -m hecgnn_trainer.cli train \
+    --arch hec_gnn \
+    --data-dir data/diverse_sa_mt \
+    --epochs 200 --patience 30 --seeds 42,123,7
 ```
 
-**Expected:** HEC-GNN degrades from 96.3% (n=50) to 38.7% (n=1000), +9.2 pp gap over FlatGNN-Large at n=1000 (25x extrapolation).
-
-### Table 3 / Figure 3: QPU transfer
+YAML sweep:
 
 ```bash
-# Step 1: Collect QPU labels (requires DWAVE_API_TOKEN, ~$335)
-DWAVE_API_TOKEN=xxx python scripts/qpu_labeling_600.py \
-    --phase calibrate --mode qpu --output-dir qpu_data    # $0.69, measure timing
-DWAVE_API_TOKEN=xxx python scripts/qpu_labeling_600.py \
-    --phase pilot --mode qpu --output-dir qpu_data        # $8, verify correlation
-DWAVE_API_TOKEN=xxx python scripts/qpu_labeling_600.py \
-    --phase large --mode qpu --output-dir qpu_data        # ~$335, full dataset
-
-# Step 2: Evaluate all methods + head-only fine-tuning (5-fold CV)
-python scripts/qpu_adapt_600.py \
-    --qpu-data qpu_data/qpu_labeling_large_qpu.json \
-    --embeddings qpu_data/embeddings_large.json \
-    --hec-dir results/hec_gnn_mt \
-    --flat-dir results/flat_gnn_mt \
-    --finetune --n-folds 5 --output qpu_adaptation_results.json
+python -m hecgnn_trainer.cli sweep --config experiments/sweep_all_architectures.yaml
 ```
 
-**Expected:** HEC-GNN (FT) alpha_5% = 92.7 +/- 1.6%, alpha_2% = 81.2 +/- 3.4%, Gap 1.42 +/- 0.42%, leading every aggregate metric. Head-only fine-tuning updates 2.1% of parameters (58,836 / 2,753,756).
+To disable V2 α-injection for ablation, set `model.alpha_mode: "none"` in the YAML, or pass `--config` with a YAML that sets it explicitly. The V1 legacy formula is also available as `alpha_mode: "rms"`.
 
-## Citation
+## Dataset
 
-```bibtex
-@inproceedings{hecgnn2026,
-  title={{HEC-GNN}: A Hierarchical Hardware-aware {GNN} for Chain Strength Selection in Quantum Annealing},
-  author={Anonymous},
-  booktitle={Advances in Neural Information Processing Systems},
-  year={2026}
-}
-```
+Synthetic datasets are generated by `src/data/generate.py` (single-process) or `src/data/parallel_generate.py` (multi-worker). Five problem families (Random Ising, SK, weighted MaxCut, planted, 3-reg MaxCut) are embedded onto four hardware topologies (Pegasus P4/P8/P16 and Zephyr Z4) via `minorminer`.
+
+The QPU benchmark protocol is in `scripts/qpu_labeling_600.py` (label collection) and `scripts/qpu_adapt_600.py` (head-only fine-tuning).
+
+The C++ Boltzmann sampler used for surrogate labelling is located via the `BOLTZMANN_CPP_BIN` environment variable, or it is expected at `src/data/boltzmann_sampler`.
+
+## Reproducibility notes
+
+- **Default normalization is V2** (D-Wave Advantage `auto_scale`). Every registered architecture is automatically wrapped with the V2 α-injection at the prediction head unless the architecture already manages α internally (the `_SKIP_ALPHA_WRAP` set in `hecgnn_trainer/registry.py`).
+- **Scalar ensemble vs curve head.** Two prediction strategies are supported. `scalar_ensemble_hec` predicts r\* directly using K=20 independent scalar heads and reports the median; `hec_gnn` (curve mode) regresses a K=20 normalized excess-energy curve and decodes by argmin with parabolic refinement.
+- **Seeds.** All results in the paper use three seeds (42, 123, 7). The training engine writes one checkpoint and one JSON result file per seed.
+- **Determinism.** PyTorch deterministic-mode is not enforced by default. For exact reproduction, set `torch.use_deterministic_algorithms(True)` and the appropriate CUDA flags before calling `TrainingEngine.run()`.
 
 ## License
 
-MIT
+MIT — see `LICENSE`.

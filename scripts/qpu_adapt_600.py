@@ -12,7 +12,7 @@ Steps:
   5. Fine-tune HEC-GNN on QPU data (freeze backbone, train energy_head)
   6. Report: δE, Gap%, curve MAE, r* MAE, p_solve comparison
 
-Usage:
+Usage (on Apollo):
   python qpu_adapt_600.py \
     --qpu-data qpu_600/qpu_labeling_large_qpu.json \
     --embeddings qpu_600/embeddings_large.json \
@@ -36,13 +36,12 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 
-# Add code paths
+# Allow imports of `src.*` from a release-style layout where this script
+# lives in scripts/ alongside the src/ package.
 SCRIPT_DIR = Path(__file__).resolve().parent
 CODE_DIR = SCRIPT_DIR.parent
 SRC_DIR = CODE_DIR / 'src'
-# Alternate path: script at project root, code at src/
-ALT_SRC = SCRIPT_DIR / "src"
-for p in [str(SRC_DIR), str(CODE_DIR), str(SCRIPT_DIR), str(ALT_SRC)]:
+for p in [str(SRC_DIR), str(CODE_DIR), str(SCRIPT_DIR)]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -104,17 +103,29 @@ def extract_qpu_curves(qpu_data):
             psolve_20 = p_solves
         else:
             n_padded += 1
-            # Pad: for missing high-r points (early stop at low r due to CBR),
-            # use the last measured energy (flat extrapolation)
-            energy_20 = np.full(20, energies[-1])
-            cbr_20 = np.full(20, cbrs[-1])
-            psolve_20 = np.full(20, p_solves[-1])
+            # Pad unmeasured slots with NaN to mark as unmeasured.
+            # Use NaN-aware argmin for r_star (only consider measured points).
+            energy_20 = np.full(20, np.nan)
+            cbr_20 = np.full(20, np.nan)
+            psolve_20 = np.full(20, np.nan)
             # Fill in measured points by matching grid positions
             for j, r in enumerate(rs):
                 idx = np.argmin(np.abs(GRID_20 - r))
                 energy_20[idx] = energies[j]
                 cbr_20[idx] = cbrs[j]
                 psolve_20[idx] = p_solves[j]
+            # For model input: interpolate NaN gaps (linear between measured)
+            measured_mask = ~np.isnan(energy_20)
+            if measured_mask.sum() >= 2:
+                measured_idx = np.where(measured_mask)[0]
+                energy_20 = np.interp(np.arange(20), measured_idx, energy_20[measured_idx])
+                cbr_20 = np.interp(np.arange(20), measured_idx, cbr_20[measured_idx])
+                psolve_20 = np.interp(np.arange(20), measured_idx, psolve_20[measured_idx])
+            else:
+                # Fallback: fill with last measured value (only 1 point)
+                energy_20 = np.where(np.isnan(energy_20), energies[-1], energy_20)
+                cbr_20 = np.where(np.isnan(cbr_20), cbrs[-1], cbr_20)
+                psolve_20 = np.where(np.isnan(psolve_20), p_solves[-1], psolve_20)
 
         r_star_idx = int(np.argmin(energy_20))
         curves.append({
@@ -144,10 +155,30 @@ def build_graphs(qpu_data, emb_data, curves):
     print(f"Using Pegasus P16 ({topology.number_of_nodes()} qubits)")
 
     instances = qpu_data['instances']
+    # Build id-keyed lookups to avoid positional mismatch
+    emb_by_id = {e['id']: e for e in emb_data} if emb_data and isinstance(emb_data[0], dict) and 'id' in emb_data[0] else None
+    curve_by_id = {c.get('id', i): c for i, c in enumerate(curves)} if curves and isinstance(curves[0], dict) and 'id' in curves[0] else None
     graphs = []
     failed = 0
 
-    for i, (inst, emb_info, curve) in enumerate(zip(instances, emb_data, curves)):
+    for i, inst in enumerate(instances):
+        # Match by id when available, fall back to positional
+        if emb_by_id and inst.get('id') in emb_by_id:
+            emb_info = emb_by_id[inst['id']]
+        elif i < len(emb_data):
+            emb_info = emb_data[i]
+        else:
+            print(f"  [{i}] No embedding data — skipping")
+            failed += 1
+            continue
+        if curve_by_id and inst.get('id') in curve_by_id:
+            curve = curve_by_id[inst['id']]
+        elif i < len(curves):
+            curve = curves[i]
+        else:
+            print(f"  [{i}] No curve data — skipping")
+            failed += 1
+            continue
         try:
             seed = inst['seed']
             n = inst['n']
@@ -311,13 +342,15 @@ def eval_baselines(graphs):
         scaled_deltas.append(float(delta))
     results['Scaled(2.0)'] = scaled_deltas
 
-    # Mean: predict mean r* from training data (approximate as median of grid)
-    idx_mid = 10  # middle of 20-point grid
+    # Mean: predict mean r* from all instances (use actual mean, not fixed midpoint)
+    all_r_stars = [float(GRID_20[np.argmin(g['energy_curve'])]) for g in graphs]
+    mean_r_star = float(np.mean(all_r_stars))
+    idx_mean = int(np.argmin(np.abs(GRID_20 - mean_r_star)))
     mean_deltas = []
     for g in graphs:
         qpu_curve = np.array(g['energy_curve'])
         qpu_opt = np.min(qpu_curve)
-        delta = (qpu_curve[idx_mid] - qpu_opt) / max(abs(qpu_opt), 1e-8)
+        delta = (qpu_curve[idx_mean] - qpu_opt) / max(abs(qpu_opt), 1e-8)
         mean_deltas.append(float(delta))
     results['Mean'] = mean_deltas
 

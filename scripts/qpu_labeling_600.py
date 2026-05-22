@@ -528,7 +528,8 @@ def compute_rich_metrics(raw_sampleset, unemb_sampleset, emb: dict,
     residual_pct = float(abs(residual) / abs(best_e) * 100) if abs(best_e) > 1e-12 else 0.0
 
     # --- p_solve (fraction of reads finding best or near-best) ---
-    threshold_e = best_e * 1.01 if best_e < 0 else best_e * 0.99
+    # Threshold = best_e + 1% of |best_e| (always ABOVE best_e, regardless of sign)
+    threshold_e = best_e + 0.01 * abs(best_e) if abs(best_e) > 1e-12 else 1e-8
     n_good = sum(1 for e in energies if e <= threshold_e + 1e-8)
     p_solve = n_good / max(len(energies), 1)
 
@@ -547,15 +548,17 @@ def compute_rich_metrics(raw_sampleset, unemb_sampleset, emb: dict,
     total_breaks = 0
     total_chains_checked = 0
 
-    for s in raw_sampleset.samples():
-        n_samples += 1
+    for record in raw_sampleset.record:
+        sample = dict(zip(raw_sampleset.variables, record.sample))
+        num_occ = record.num_occurrences
+        n_samples += num_occ
         for var, chain in emb.items():
             cl = list(chain)
             if len(cl) > 1:
-                if len(set(s.get(q, 0) for q in cl)) > 1:
-                    per_chain_breaks[var] += 1
-                    total_breaks += 1
-            total_chains_checked += 1
+                if len(set(sample.get(q, 0) for q in cl)) > 1:
+                    per_chain_breaks[var] += num_occ
+                    total_breaks += num_occ
+            total_chains_checked += num_occ
 
     cbr = float(total_breaks / max(total_chains_checked, 1))
     per_chain_cbr = {
@@ -686,14 +689,19 @@ def qpu_grid_search(
 
         sweep.append(metrics)
 
-        # Early stopping on chain break saturation
+        # Early stopping: only on DESCENDING cbr trend (high-r side).
+        # On ascending grid (low→high r), low-r always has high CBR (weak chains),
+        # so we must NOT stop early before reaching the good region.
+        # Early-stop only when: (a) we've seen the CBR basin (low CBR region),
+        # AND (b) CBR rises again on the high-r side (over-strong chains).
         cbr = metrics['cbr']
-        if cbr > 0.5:
+        saw_low_cbr = any(s['cbr'] < 0.3 for s in sweep)
+        if saw_low_cbr and cbr > 0.5:
             consecutive_high_cbr += 1
         else:
             consecutive_high_cbr = 0
-        if consecutive_high_cbr >= 2 and len(sweep) >= 3:
-            print(f"      Early stop at r={r:.3f} (cbr>{0.5} x2)")
+        if consecutive_high_cbr >= 2 and len(sweep) >= 5:
+            print(f"      Early stop at r={r:.3f} (past basin, cbr>{0.5} x2)")
             break
 
     # Post-process: energy_recovery relative to global best

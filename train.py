@@ -3,8 +3,8 @@
 train.py -- Training script for HEC-GNN and FlatGNN.
 
 Trains on energy curve prediction with auxiliary CBR + RMS losses.
-Matches V3 paper Section 5: AdamW, lr=5e-4, wd=1e-4, batch=32,
-cosine annealing 200 epochs, patience 30, gradient clip 1.0.
+Training recipe: AdamW, lr=5e-4, wd=1e-4, batch=32, cosine annealing for
+200 epochs, patience 30, gradient clip 1.0.
 
 Usage:
   # Train HEC-GNN on multi-topology SA data

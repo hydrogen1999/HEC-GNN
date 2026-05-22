@@ -117,7 +117,7 @@ class GATLayer(nn.Module):
 
 def build_hec_variant(variant_name):
     """Build HEC-GNN with different Stage 1."""
-    from models.hec_gnn import HECGNN
+    from src.models.hec_gnn import HECGNN
     model = HECGNN()
 
     class VariantEncoder(nn.Module):

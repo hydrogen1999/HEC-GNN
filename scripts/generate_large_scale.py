@@ -2,7 +2,7 @@
 """
 generate_large_scale.py -- Multi-process large-scale OOD dataset generation.
 
-Professor TODO #4: scalability testing with n={100, 200, 300, 500, 1000}.
+Scalability dataset for n in {100, 200, 300, 500, 1000}.
 
 P16 Pegasus (5640 qubits) embedding limits require adaptive density:
   n=100:  density 0.10-0.30  (~1500 edges, embeds in ~13s)
@@ -15,7 +15,7 @@ Only random_ising family (SK is fully-connected, won't embed for n>30).
 SA labeling cost reduced for larger n to keep wall time manageable.
 
 Usage:
-  # Full generation (28 workers)
+  # Full generation (32 workers on Apollo)
   python generate_large_scale.py --workers 28
 
   # Quick test

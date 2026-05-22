@@ -1,0 +1,181 @@
+# ============================================================================
+# Full 27-Architecture Sweep with Literature-Recommended Configs
+# ============================================================================
+#
+# Hyperparameter rationale per architecture (from original papers + benchmarks):
+#
+# GCN (Kipf 2017):         hidden=128, layers=4, no edge feat. Over-smooths at >6 layers.
+# GIN (Xu 2019):           hidden=128, layers=5, eps=0. Best at 5 layers on graph tasks.
+# GraphSAGE (Hamilton 2017): hidden=128, layers=4. Mean aggregation, scales well.
+# GATv2 (Brody 2022):      hidden=128, layers=4, heads=4. Dynamic > static attention.
+# PNA (Corso 2020):        hidden=128, layers=4. Multi-aggregator SOTA on ZINC.
+# GatedGCN (Bresson 2017): hidden=128, layers=4. Edge-gated, strong on LRGB.
+# EdgeConv (Wang 2019):    hidden=128, layers=5. Max pooling on relative features.
+# APPNP (Gasteiger 2019):  hidden=128, hops=10, alpha=0.1. Parameter-efficient.
+# R-GCN (Schlichtkrull 2018): hidden=160, layers=6. Relational (chain vs inter).
+# GPS (Rampasek 2022):     hidden=96, layers=6. Graph Transformer, attention+MPNN.
+# FlatGNN (ours):          hidden=128, layers=6. GIN-E baseline.
+# FlatGNN-Large:           hidden=192, layers=8. Capacity-matched to HEC-GNN.
+# Flat-GAT (ours):         hidden=128, layers=6, heads=4. GAT with edge features.
+# HeteroSAGE (PyG):        hidden=140, layers=6. Per-relation SAGE.
+# FlatAGNN (ours):         hidden=128, layers=6. Anisotropic gating.
+# DeepSets (Zaheer 2017):  hidden=128, 3-layer MLP. No MP — ablation baseline.
+# MLP-Curve:               hidden=[256,128,64]. 18 features → K curve.
+# MLP-Scalar:              hidden=[256,128,64]. 18 features → r*.
+#
+# HEC-GNN (ours):          hidden=128, L1=3, L3=3. 3-stage hierarchy.
+# HEC-AGNN (ours):         hidden=128, L1=3, L3=3. Anisotropic Stage 1.
+# SAGE-HEC:                hidden=128, L1=3, L3=3. SAGE Stage 1.
+# GAT-HEC:                 hidden=128, L1=3, L3=3. GAT Stage 1.
+# HEC-PNA:                 hidden=128, L1=3, L3=3. PNA Stage 1 (multi-aggregator).
+# HEC-GATv2:               hidden=128, L1=3, L3=3. GATv2 Stage 1.
+# HEC-GCN:                 hidden=128, L1=3, L3=3. GCN Stage 1 (simplest).
+# HEC-EdgeConv:            hidden=128, L1=3, L3=3. EdgeConv Stage 1.
+# HEC-GatedGCN:            hidden=128, L1=3, L3=3. EdgeConv proxy Stage 1.
+# ============================================================================
+
+sweep_name: "full_27_arch"
+
+base:
+  data:
+    data_dir: "data/diverse_sa_mt"
+    train_file: "multi_topo_train.pkl"
+    val_file: "multi_topo_val.pkl"
+    test_file: "multi_topo_test.pkl"
+  train:
+    lr: 5.0e-4
+    weight_decay: 1.0e-4
+    epochs: 200
+    batch_size: 32
+    patience: 30
+    warmup_epochs: 5
+    seeds: [42]  # Single seed for quick comparison; expand to [42,123,7] for paper
+    optimizer: "adamw"
+    scheduler: "cosine_warmup"
+  output_dir: "results/full_27_arch"
+
+experiments:
+  # ==============================
+  # FLAT MODELS (14)
+  # ==============================
+
+  # --- Classic MPNNs ---
+  - name: "gcn"
+    model:
+      arch: "gcn"
+      hidden_dim: 128
+      num_layers: 4  # GCN over-smooths >6, 4 is sweet spot for graph regression
+
+  - name: "gin"
+    model:
+      arch: "gin"
+      hidden_dim: 128
+      num_layers: 5  # GIN paper: 5 layers optimal for WL-expressive graph tasks
+      eps_init: 0.0
+
+  - name: "sage"
+    model:
+      arch: "sage"
+      hidden_dim: 128
+      num_layers: 4  # SAGE: 2-4 layers typical, mean aggregation
+
+  - name: "gatv2"
+    model:
+      arch: "gatv2"
+      hidden_dim: 128
+      num_layers: 4  # GATv2 paper: 4 layers, heads=4 on molecular benchmarks
+      heads: 4
+
+  # --- Strong baselines ---
+  - name: "pna"
+    model:
+      arch: "pna"
+      hidden_dim: 128
+      num_layers: 4  # PNA paper: 4 layers on ZINC (graph regression SOTA)
+
+  - name: "gated_gcn"
+    model:
+      arch: "gated_gcn"
+      hidden_dim: 128
+      num_layers: 4  # GatedGCN: 4 layers, edge features critical
+
+  - name: "edgeconv"
+    model:
+      arch: "edgeconv"
+      hidden_dim: 128
+      num_layers: 5  # DGCNN: 5 layers, max pooling on relative features
+
+  - name: "appnp"
+    model:
+      arch: "appnp"
+      hidden_dim: 128
+      num_layers: 3  # APPNP: MLP depth (3 layers), propagation is parameter-free
+      extra:
+        appnp_alpha: 0.1   # Teleport probability (paper: 0.1 optimal)
+        appnp_hops: 10      # Propagation hops (paper: 10)
+
+  # --- Existing baselines ---
+  - name: "flat_gnn"
+    model: { arch: "flat_gnn", hidden_dim: 128, num_layers: 6 }
+
+  - name: "flat_gnn_large"
+    model: { arch: "flat_gnn_large", hidden_dim: 192, num_layers: 8 }
+
+  - name: "flat_gat"
+    model: { arch: "flat_gat", hidden_dim: 128, num_layers: 6, heads: 4 }
+
+  - name: "rgcn"
+    model: { arch: "rgcn", hidden_dim: 160, num_layers: 6 }
+
+  - name: "gps"
+    model: { arch: "gps", hidden_dim: 96, num_layers: 6 }  # GPS: smaller hidden, more layers
+
+  - name: "hetero_sage"
+    model: { arch: "hetero_sage", hidden_dim: 140, num_layers: 6 }
+
+  # ==============================
+  # HIERARCHICAL MODELS (10)
+  # ==============================
+
+  - name: "hec_gnn"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "hec_agnn"
+    model: { arch: "hec_agnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "sage_hec"
+    model: { arch: "sage_hec" }
+
+  - name: "gat_hec"
+    model: { arch: "gat_hec" }
+
+  - name: "hec_pna"
+    model: { arch: "hec_pna", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "hec_gatv2"
+    model: { arch: "hec_gatv2", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3, heads: 4 }
+
+  - name: "hec_gcn"
+    model: { arch: "hec_gcn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "hec_edgeconv"
+    model: { arch: "hec_edgeconv", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "hec_gatedgcn"
+    model: { arch: "hec_gatedgcn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+
+  - name: "flat_agnn"
+    model: { arch: "agnn", hidden_dim: 128, num_layers: 6 }
+
+  # ==============================
+  # NON-GNN BASELINES (3)
+  # ==============================
+
+  - name: "deepsets"
+    model: { arch: "deepsets", hidden_dim: 128 }
+
+  - name: "mlp_curve"
+    model: { arch: "mlp_curve", mlp_hidden_layers: [256, 128, 64] }
+
+  - name: "mlp_scalar"
+    model: { arch: "mlp_scalar", mlp_hidden_layers: [256, 128, 64] }

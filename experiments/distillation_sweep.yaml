@@ -1,0 +1,68 @@
+# ============================================================================
+# Knowledge Distillation Sweep
+# ============================================================================
+#
+# Teacher: HEC-GNN (2.75M params, trained on diverse_sa_mt)
+# Students: CompactHEC (455K), TinyHEC (82K), FlatGNN (161K)
+#
+# KD Methods tested:
+#   1. response_soft:   Soft labels KL divergence (Hinton 2015)
+#   2. response_score:  Score matching MSE (Ba & Caruana 2014)
+#   3. response_rank:   Rank preservation (argmin transfer)
+#   4. feature_fitnet:  FitNet intermediate matching (Romero 2015)
+#   5. feature_attn:    Attention transfer (Zagoruyko 2017)
+#   6. relation_rkd:    RKD distance + angle (Park 2019)
+#   7. combined_all:    All methods together
+#
+# Baselines:
+#   - compact_hec_scratch: CompactHEC trained from scratch (no KD)
+#   - tiny_hec_scratch:    TinyHEC trained from scratch
+#
+# Expected: KD methods should close the gap between compact and full HEC-GNN.
+# Best methods typically: soft labels + fitnet (from TinyBERT, DistilBERT papers).
+# ============================================================================
+
+sweep_name: "distillation_methods"
+
+base:
+  data:
+    data_dir: "data/diverse_sa_mt"
+    train_file: "multi_topo_train.pkl"
+    val_file: "multi_topo_val.pkl"
+    test_file: "multi_topo_test.pkl"
+  train:
+    lr: 5.0e-4
+    epochs: 200
+    batch_size: 32
+    patience: 30
+    seeds: [42]
+  output_dir: "results/distillation"
+
+experiments:
+  # --- Baselines (no distillation) ---
+  - name: "compact_scratch"
+    model: { arch: "compact_hec", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    tags: ["baseline", "no_kd"]
+
+  - name: "tiny_scratch"
+    model: { arch: "tiny_hec" }
+    tags: ["baseline", "no_kd"]
+
+  - name: "flatgnn_scratch"
+    model: { arch: "flat_gnn", hidden_dim: 128, num_layers: 6 }
+    tags: ["baseline", "no_kd"]
+
+  # --- Response-Based KD (students distilled from HEC-GNN teacher) ---
+  # These are configured in the distillation engine, not here.
+  # See cli.py: python -m hecgnn_trainer distill --config ... --method soft_labels
+  #
+  # Method configs for reference:
+  #   soft_labels:  w_task=0.5, w_soft=0.5, temperature=2.0
+  #   score_match:  w_task=0.5, w_score=0.5
+  #   rank:         w_task=0.5, w_rank=0.5, rank_top_k=5
+  #   fitnet:       w_task=0.4, w_soft=0.3, w_fitnet=0.3
+  #   attn:         w_task=0.4, w_soft=0.3, w_attn=0.3
+  #   rkd:          w_task=0.4, w_soft=0.3, w_rkd_d=0.15, w_rkd_a=0.15
+  #   combined:     w_task=0.3, w_soft=0.15, w_score=0.15, w_fitnet=0.15, w_rkd_d=0.1, w_rkd_a=0.05, w_attn=0.1
+
+  # --- For the sweep, just train baselines. Distillation runs via DistillEngine. ---

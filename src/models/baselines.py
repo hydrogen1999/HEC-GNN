@@ -1,5 +1,5 @@
 """
-baselines.py -- All baselines for V3 paper (self-contained, no V2 dependencies).
+baselines.py -- Self-contained baseline implementations (FlatGNN family).
 
 Baselines from Section 5:
   1. UTC: Uniform Torque Compensation (closed-form heuristic)
@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# Grid (matching V3 paper)
+# Grid (chain-strength ratio grid used by the trainer)
 # ---------------------------------------------------------------------------
 K = 20
 R_MIN = 0.02

@@ -26,7 +26,7 @@ from src.models.layers import (
 )
 
 # ---------------------------------------------------------------------------
-# Constants matching V3 paper
+# Model constants
 # ---------------------------------------------------------------------------
 K = 20                  # grid points
 NODE_DIM = 7            # [h/rms, |h|/rms, deg_C, deg_x, |C_i|, delta/rms, 1_{singleton}]

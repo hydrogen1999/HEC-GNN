@@ -1,0 +1,35 @@
+# FlatGNN-Large + alpha-injection ablation.
+# Tests whether the gap between FlatGNN-Large and HEC-GNN is closed by
+# the alpha-injection at the head, isolating hierarchical inductive bias
+# from hardware-rescaling conditioning at matched parameter count.
+#
+# Run: python -m hecgnn_trainer.cli train --config experiments/flatgnn_alpha_ablation.yaml
+
+name: "flatgnn_large_alpha"
+
+model:
+  arch: "flat_gnn_large_alpha_hw"
+  hidden_dim: 192
+  num_layers: 8
+  K: 20
+
+train:
+  lr: 5.0e-4
+  epochs: 200
+  batch_size: 32
+  patience: 30
+  seeds: [42, 123, 7]
+
+data:
+  data_dir: "data/diverse_sa_mt"
+  train_file: "multi_topo_train.pkl"
+  val_file: "multi_topo_val.pkl"
+  test_file: "multi_topo_test.pkl"
+
+server:
+  name: "local"
+  gpu_id: 0
+
+output_dir: "results/flatgnn_alpha_ablation"
+tags: ["ablation", "alpha-injection"]
+notes: "FlatGNN-Large with D-Wave auto_scale alpha-injection at the head."

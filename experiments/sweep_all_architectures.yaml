@@ -1,0 +1,97 @@
+# Sweep: all architectures on diverse_sa_mt.
+# Run: python -m hecgnn_trainer sweep --config experiments/sweep_all_architectures.yaml --dashboard
+
+sweep_name: "all_arch_diverse_sa"
+
+base:
+  data:
+    data_dir: "data/diverse_sa_mt"
+    train_file: "multi_topo_train.pkl"
+    val_file: "multi_topo_val.pkl"
+    test_file: "multi_topo_test.pkl"
+  train:
+    lr: 5.0e-4
+    epochs: 200
+    batch_size: 32
+    patience: 30
+    seeds: [42, 123, 7]
+  output_dir: "results/sweep_all_arch"
+
+experiments:
+  # --- Hierarchical models (our proposed + variants) ---
+  - name: "hec_gnn"
+    model:
+      arch: "hec_gnn"
+      hidden_dim: 128
+      num_layers: 3
+      num_layers_stage3: 3
+
+  - name: "hec_agnn"
+    model:
+      arch: "hec_agnn"
+      hidden_dim: 128
+      num_layers: 3
+      num_layers_stage3: 3
+
+  - name: "sage_hec"
+    model:
+      arch: "sage_hec"
+
+  - name: "gat_hec"
+    model:
+      arch: "gat_hec"
+
+  # --- Flat GNN models ---
+  - name: "flat_gnn"
+    model:
+      arch: "flat_gnn"
+      hidden_dim: 128
+      num_layers: 6
+
+  - name: "flat_gnn_large"
+    model:
+      arch: "flat_gnn_large"
+      hidden_dim: 192
+      num_layers: 8
+
+  - name: "flat_agnn"
+    model:
+      arch: "agnn"
+      hidden_dim: 128
+      num_layers: 6
+
+  - name: "flat_gat"
+    model:
+      arch: "flat_gat"
+      hidden_dim: 128
+      num_layers: 6
+      heads: 4
+
+  - name: "rgcn"
+    model:
+      arch: "rgcn"
+      hidden_dim: 160
+      num_layers: 6
+
+  - name: "gps"
+    model:
+      arch: "gps"
+      hidden_dim: 96
+      num_layers: 6
+
+  - name: "hetero_sage"
+    model:
+      arch: "hetero_sage"
+      hidden_dim: 140
+      num_layers: 6
+
+  # --- Non-GNN baselines ---
+  - name: "mlp_curve"
+    model:
+      arch: "mlp_curve"
+      mlp_hidden_layers: [256, 128, 64]
+
+  - name: "mlp_scalar"
+    model:
+      arch: "mlp_scalar"
+      mlp_hidden_layers: [256, 128, 64]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_v3_datasets.py -- Dataset generation for V3 paper (NeurIPS 2026).
+generate.py -- Synthetic dataset generation for the chain-strength benchmark.
 
 Generates two benchmark suites matching Section 5 (Experimental setup):
 
@@ -52,7 +52,7 @@ import minorminer
 from dwave.embedding import embed_bqm, unembed_sampleset
 
 # ---------------------------------------------------------------------------
-# Constants matching V3 paper Section 5
+# Generation constants
 # ---------------------------------------------------------------------------
 SEED = 42
 
@@ -361,7 +361,6 @@ def _find_cpp_boltzmann():
     import shutil
     candidates = [
         os.environ.get('BOLTZMANN_CPP_BIN', ''),
-        '/tmp/hecgnn/cpp_boltzmann/boltzmann_sampler',
         os.path.join(os.path.dirname(__file__), 'boltzmann_sampler'),
     ]
     for c in candidates:

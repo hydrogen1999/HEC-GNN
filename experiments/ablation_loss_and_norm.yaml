@@ -1,0 +1,69 @@
+# ============================================================================
+# Ablation: Loss modes + Normalization/J_C injection
+# ============================================================================
+#
+# Experiments:
+#   1. loss_mode ablation: standard vs auxiliary_only vs energy_only vs cbr_only
+#   2. J_C injection: provide J_C directly vs let model learn
+#   3. Hardware normalization: α-space vs RMS-space
+# ============================================================================
+
+sweep_name: "ablation_loss_norm"
+
+base:
+  data:
+    data_dir: "data/diverse_sa_mt"
+    train_file: "multi_topo_train.pkl"
+    val_file: "multi_topo_val.pkl"
+    test_file: "multi_topo_test.pkl"
+  train:
+    lr: 5.0e-4
+    epochs: 200
+    batch_size: 32
+    patience: 30
+    seeds: [42]
+  output_dir: "results/ablation"
+
+experiments:
+  # --- 1. Loss mode ablation (same HEC-GNN architecture, different losses) ---
+  - name: "hec_standard"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    train: { loss_mode: "standard" }
+    notes: "Baseline: L_energy + 0.1*L_cbr + 0.05*L_rms"
+
+  - name: "hec_auxiliary_only"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    train: { loss_mode: "auxiliary_only" }
+    notes: "NO energy curve loss. Only L_cbr + L_rms. Can break patterns predict r*?"
+
+  - name: "hec_energy_only"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    train: { loss_mode: "energy_only" }
+    notes: "NO auxiliary losses. Only L_energy. How much do auxiliaries help?"
+
+  - name: "hec_cbr_only"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    train: { loss_mode: "cbr_only" }
+    notes: "ONLY chain break prediction. Backbone learns break patterns, head predicts from that."
+
+  # --- 2. J_C injection ablation ---
+  - name: "hec_jc_direct"
+    model: { arch: "jc_direct_hec", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    notes: "Provide J_C = r*RMS(J) directly to head. Model doesn't learn normalization."
+
+  - name: "hec_hw_norm"
+    model: { arch: "hw_norm_hec", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    notes: "Hardware rescaling α vector injected. Matches QPU's actual coordinate system."
+
+  # --- 3. Same ablations on Boltzmann data ---
+  - name: "hec_boltz_standard"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    data: { data_dir: "data/diverse_boltz_mt" }
+    train: { loss_mode: "standard" }
+    notes: "Standard loss on Boltzmann labels"
+
+  - name: "hec_boltz_auxiliary_only"
+    model: { arch: "hec_gnn", hidden_dim: 128, num_layers: 3, num_layers_stage3: 3 }
+    data: { data_dir: "data/diverse_boltz_mt" }
+    train: { loss_mode: "auxiliary_only" }
+    notes: "Auxiliary-only on Boltzmann: break patterns under Gibbs sampling"
