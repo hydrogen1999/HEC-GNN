@@ -62,7 +62,7 @@ This is the central reason the registry contains both *curve mode* (predict $\ba
 D-Wave Advantage applies `auto_scale` at submission time:
 
 $$
-S(r_k) = \max\left\{\frac{\max h}{H_{\max}},\; \frac{-\min h}{H_{\max}},\; \frac{\max J}{J^+_{\max}},\; \frac{-\min J}{J^-_{\max}},\; \frac{r_k \cdot \mathrm{RMS}(J)}{J^-_{\max}},\; 1\right\}, \qquad \alpha(r_k) = \frac{1}{S(r_k)}
+S(r_k) = \max\{\frac{\max h}{H_{\max}},\; \frac{-\min h}{H_{\max}},\; \frac{\max J}{J^+_{\max}},\; \frac{-\min J}{J^-_{\max}},\; \frac{r_k \cdot \mathrm{RMS}(J)}{J^-_{\max}},\; 1\}, \qquad \alpha(r_k) = \frac{1}{S(r_k)}
 $$
 
 with the Pegasus hardware constants $H_{\max} = 4$, $J^+_{\max} = 1$, $J^-_{\max} = 2$. This formula is the contract that the prediction head must respect: changing $J_c$ changes $\alpha$, which compresses every Hamiltonian coefficient proportionally. The model must reason about which side of the threshold $S = 1$ each grid point lies on.
